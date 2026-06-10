@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eco-Drive Agro: Futuro Sustentável</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            overflow: hidden;
+            background-color: #e0f0e3;
+        }
+
+        /* Interface do Usuário (HUD) */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #2ed573;
+        }
+
+        .stat {
+            font-size: 18px;
+            margin-bottom: 5px;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 8px 15px;
+            border-radius: 20px;
+            display: inline-block;
+            backdrop-filter: blur(5px);
+        }
+
+        /* Barra de Sustentabilidade */
+        #bar-container {
+            width: 200px;
+            height: 15px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 5px;
+            border: 1px solid white;
+        }
+
+        #sust-bar {
+            width: 100%;
+            height: 100%;
+            background: #2ed573;
+            transition: width 0.2s, background-color 0.3s;
+        }
+
+        /* Telas de Menu e Game Over */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 25, 15, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 20;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .screen h2 {
+            font-size: 42px;
+            color: #2ed573;
+            margin-bottom: 20px;
+        }
+
+        .screen p {
+            font-size: 18px;
+            max-width: 600px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            color: white;
+            background: #2ed573;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 5px 15px rgba(46, 213, 115, 0.4);
+        }
+
+        button:hover {
+            background: #26af5f;
+            transform: scale(1.05);
+        }
+
+        #game-over-screen {
+            display: none;
+        }
+
+        /* Instruções de Controle */
+        #controls-info {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 10;
+            pointer-events: none;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="hud">
+        <h1>Agro Forte, Futuro Sustentável</h1>
+        <div class="stat">Produção: <span id="score-val">0</span></div><br>
+        <div class="stat">
+            Equilíbrio Ambiental
+            <div id="bar-container">
+                <div id="sust-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls-info">Use as Setas (Esquerda / Direita) ou A / D para mover o trator eco-eficiente</div>
+
+    <div id="start-screen" class="screen">
+        <h2>Eco-Drive Agro 3D</h2>
+        <p>Bem-vindo ao futuro do campo! Pilote o trator elétrico e maximize a produção agrícola mantendo o meio ambiente em perfeito equilíbrio. Colete mudas e painéis solares, mas evite os poluentes químicos e focos de queima!</p>
+        <button onclick="startGame()">Iniciar Missão</button>
+    </div>
+
+    <div id="game-over-screen" class="screen">
+        <h2>Fim da Colheita!</h2>
+        <p>O ecossistema entrou em colapso devido ao desequilíbrio gerado na produção.</p>
+        <div class="stat" style="margin-bottom: 20px;">Sua Produção Total: <span id="final-score">0</span></div>
+        <button onclick="restartGame()">Tentar Novamente</button>
+    </div>
+
+    <script>
+        // --- CONFIGURAÇÕES DO JOGO ---
+        let scene, camera, renderer;
+        let tractor;
+        let items = [];
+        let score = 0;
+        let sustainability = 100;
+        let gameActive = false;
+        let speed = 0.4;
+        const laneWidth = 4;
+        let targetX = 0;
+
+        // Elementos DOM
+        const scoreVal = document.getElementById('score-val');
+        const sustBar = document.getElementById('sust-bar');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScore = document.getElementById('final-score');
+
+        // --- INICIALIZAÇÃO DO AMBIENTE 3D ---
+        function init3D() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xa8e6cf);
+            scene.fog = new THREE.FogExp2(0xa8e6cf, 0.015);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
+            camera.lookAt(0, 1, -5);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Iluminação
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(10, 20, 10);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // Criar Cenário (Chão e Estrada)
+            createEnvironment();
+
+            // Criar o Veículo do Jogador (Trator Eco)
+            createTractor();
+
+            // Eventos de Input
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        // --- CONSTRUÇÃO DE MODELOS GEOMÉTRICOS (Procedural) ---
+        function createEnvironment() {
+            // Chão de Terra/Grama
+            const groundGeo = new THREE.PlaneGeometry(100, 1000);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x557a46, roughness: 0.9 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.z = -400;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Estrada / Linhas de plantação
+            const fieldGeo = new THREE.PlaneGeometry(14, 1000);
+            const fieldMat = new THREE.MeshStandardMaterial({ color: 0x7a4f37, roughness: 0.8 });
+            const field = new THREE.Mesh(fieldGeo, fieldMat);
+            field.rotation.x = -Math.PI / 2;
+            field.position.set(0, 0.01, -400);
+            scene.add(field);
+            
+            // Adicionar demarcações de faixas
+            for(let i = 0; i > -1000; i -= 20) {
+                const lineGeo = new THREE.BoxGeometry(0.2, 0.02, 5);
+                const lineMat = new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.3});
+                const line1 = new THREE.Mesh(lineGeo, lineMat);
+                line1.position.set(-2, 0.02, i);
+                const line2 = new THREE.Mesh(lineGeo, lineMat);
+                line2.position.set(2, 0.02, i);
+                scene.add(line1);
+                scene.add(line2);
+            }
+        }
+
+        function createTractor() {
+            tractor = new THREE.Group();
+
+            // Corpo Principal (Cabine Futurista - Verde Bio)
+            const bodyGeo = new THREE.BoxGeometry(1.6, 1, 2);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x26af5f, roughness: 0.5 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.7;
+            body.castShadow = true;
+            tractor.add(body);
+
+            // Cabine de Vidro
+            const cabinGeo = new THREE.BoxGeometry(1.2, 0.8, 1.2);
+            const cabinMat = new THREE.MeshStandardMaterial({ color: 0xdff9fb, transparent: true, opacity: 0.6 });
+            const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+            cabin.position.set(0, 1.5, -0.2);
+            tractor.add(cabin);
+
+            // Rodas Traseiras (Grandes)
+            const wheelLargeGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.4, 16);
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, roughness: 0.9 });
+            
+            const wheelRL = new THREE.Mesh(wheelLargeGeo, wheelMat);
+            wheelRL.rotation.z = Math.PI / 2;
+            wheelRL.position.set(-0.9, 0.6, 0.5);
+            wheelRL.castShadow = true;
+            tractor.add(wheelRL);
+
+            const wheelRR = wheelRL.clone();
+            wheelRR.position.x = 0.9;
+            tractor.add(wheelRR);
+
+            // Rodas Dianteiras (Pequenas)
+            const wheelSmallGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
+            const wheelFL = new THREE.Mesh(wheelSmallGeo, wheelMat);
+            wheelFL.rotation.z = Math.PI / 2;
+            wheelFL.position.set(-0.9, 0.4, -0.7);
+            wheelFL.castShadow = true;
+            tractor.add(wheelFL);
+
+            const wheelFR = wheelFL.clone();
+            wheelFR.position.x = 0.9;
+            tractor.add(wheelFR);
+
+            // Placa Solar Decorativa no Teto
+            const panelGeo = new THREE.BoxGeometry(1.1, 0.05, 1.1);
+            const panelMat = new THREE.MeshStandardMaterial({ color: 0x0a3d62, metalness: 0.8 });
+            const panel = new THREE.Mesh(panelGeo, panelMat);
+            panel.position.set(0, 1.95, -0.2);
+            tractor.add(panel);
+
+            scene.add(tractor);
+        }
+
+        // --- SISTEMA DE SPAWN (ITENS SUSTENTÁVEIS VS POLUENTES) ---
+        function spawnItem() {
+            if (!gameActive) return;
+
+            const lanes = [-laneWidth, 0, laneWidth];
+            const randomLane = lanes[Math.floor(Math.random() * lanes.length)];
+            
+            // 60% chance de item sustentável, 40% de poluente/obstáculo
+            const isGood = Math.random() > 0.4;
+            let itemGroup = new THREE.Group();
+            let type = "";
+
+            if (isGood) {
+                if(Math.random() > 0.5) {
+                    // Item: Árvore/Muda (Verde)
+                    type = "tree";
+                    const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 8), new THREE.MeshStandardMaterial({color: 0x2ed573}));
+                    leaves.position.y = 1.2;
+                    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.8), new THREE.MeshStandardMaterial({color: 0x57370d}));
+                    trunk.position.y = 0.4;
+                    itemGroup.add(leaves, trunk);
+                } else {
+                    // Item: Painel Solar (Azul)
+                    type = "solar";
+                    const plate = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 1), new THREE.MeshStandardMaterial({color: 0x1e3799, metalness: 0.5}));
+                    plate.rotation.x = 0.3;
+                    plate.position.y = 0.5;
+                    itemGroup.add(plate);
+                }
+            } else {
+                if(Math.random() > 0.5) {
+                    // Obstáculo: Barril Químico (Tóxico)
+                    type = "toxic";
+                    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.2, 12), new THREE.MeshStandardMaterial({color: 0xb33939, roughness: 0.3}));
+                    barrel.position.y = 0.6;
+                    itemGroup.add(barrel);
+                } else {
+                    // Obstáculo: Foco de Incêndio/Queimada
+                    type = "fire";
+                    const fire = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.5, 8), new THREE.MeshBasicMaterial({color: 0xff793f}));
+                    fire.position.y = 0.75;
+                    itemGroup.add(fire);
+                }
+            }
+
+            itemGroup.position.set(randomLane, 0, -60);
+            scene.add(itemGroup);
+            items.push({ mesh: itemGroup, type: type });
+
+            // Agendar próximo spawn baseado na velocidade
+            setTimeout(spawnItem, Math.max(700, 2000 - speed * 2000));
+        }
+
+        // --- MECÂNICA DE ENTRADA (CONTROLES) ---
+        function handleKeyDown(event) {
+            if (!gameActive) return;
+
+            if (event.key === 'ArrowLeft' || event.key === 'a' || event.key === 'A') {
+                if (targetX > -laneWidth) targetX -= laneWidth;
+            }
+            if (event.key === 'ArrowRight' || event.key === 'd' || event.key === 'D') {
+                if (targetX < laneWidth) targetX += laneWidth;
+            }
+        }
+
+        // --- LOOP PRINCIPAL DO JOGO (RENDER & LÓGICA) ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (gameActive) {
+                // Suavizar movimento lateral do trator
+                tractor.position.x = THREE.MathUtils.lerp(tractor.position.x, targetX, 0.15);
+                
+                // Leve rotação ao mudar de faixa para dar realismo
+                tractor.rotation.y = (targetX - tractor.position.x) * 0.1;
+
+                // Animação das Rodas (Giro)
+                tractor.children.forEach(child => {
+                    if(child.geometry && child.geometry.type === "CylinderGeometry") {
+                        child.rotation.x += speed * 0.5;
+                    }
+                });
+
+                // Movimentação e colisão de itens
+                for (let i = items.length - 1; i >= 0; i--) {
+                    let item = items[i];
+                    item.mesh.position.z += speed;
+
+                    // Rotacionar itens para chamar atenção
+                    if (item.type === "solar" || item.type === "tree") {
+                        item.mesh.rotation.y += 0.02;
+                    }
+
+                    // Checagem de Colisão Aproximada (Bounding Box simples por distância)
+                    let dist = tractor.position.distanceTo(item.mesh.position);
+                    if (dist < 1.5) {
+                        handleCollision(item.type);
+                        scene.remove(item.mesh);
+                        items.splice(i, 1);
+                        continue;
+                    }
+
+                    // Remover itens que passaram da tela
+                    if (item.mesh.position.z > 15) {
+                        scene.remove(item.mesh);
+                        items.splice(i, 1);
+                    }
+                }
+
+                // Aceleração gradual do jogo
+                speed += 0.0001;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- SISTEMA DE SCORE E EQUILÍBRIO AMBIENTAL ---
+        function handleCollision(type) {
+            if (type === "tree" || type === "solar") {
+                // Ações Sustentáveis aumentam produção e regeneram o ambiente
+                score += 10;
+                sustainability = Math.min(100, sustainability + 5);
+                scoreVal.style.color = "#2ed573";
+            } else if (type === "toxic" || type === "fire") {
+                // Práticas prejudiciais destroem o equilíbrio ambiental
+                sustainability = Math.max(0, sustainability - 25);
+                scoreVal.style.color = "#ff4757";
+                
+                // Pequeno feedback visual de erro na tela
+                document.body.style.backgroundColor = "#ff793f";
+                setTimeout(() => document.body.style.backgroundColor = "#e0f0e3", 100);
+            }
+
+            // Atualizar HUD
+            scoreVal.innerText = score;
+            sustBar.style.width = sustainability + "%";
+
+            // Trocar cores da barra dinamicamente baseada no estado crítico
+            if (sustainability > 50) sustBar.style.backgroundColor = "#2ed573";
+            else if (sustainability > 25) sustBar.style.backgroundColor = "#ffa502";
+            else sustBar.style.backgroundColor = "#ff4757";
+
+            // Condição de Game Over
+            if (sustainability <= 0) {
+                endGame();
+            }
+        }
+
+        // --- CONTROLE DE ESTADOS DO JOGO ---
+        function startGame() {
+            startScreen.style.display = 'none';
+            gameActive = true;
+            spawnItem();
+        }
+
+        function endGame() {
+            gameActive = false;
+            finalScore.innerText = score;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        function restartGame() {
+            // Resetar variáveis
+            score = 0;
+            sustainability = 100;
+            speed = 0.4;
+            targetX = 0;
+            tractor.position.set(0, 0, 0);
+            scoreVal.innerText = score;
+            sustBar.style.width = "100%";
+            sustBar.style.backgroundColor = "#2ed573";
+
+            // Limpar itens restantes na tela
+            items.forEach(item => scene.remove(item.mesh));
+            items = [];
+
+            gameOverScreen.style.display = 'none';
+            gameActive = true;
+            spawnItem();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Inicializar aplicação ao carregar a página
+        window.onload = () => {
+            init3D();
+            animate();
+        };
+    </script>
+</body>
+</html>
